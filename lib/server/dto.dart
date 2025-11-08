@@ -266,3 +266,78 @@ class DeleteRoadmapResponse {
         'message': message,
       };
 }
+
+/// POST /roadmaps/:id/nodes/:nodeId/start 응답 DTO
+/// POST /roadmaps/:id/nodes/:nodeId/complete 응답 DTO
+class NodeProgressResponse {
+  final String roadmapId;
+  final String nodeId;
+  final String status;
+  final double progress;
+  final String message;
+  final List<String>? availableNodes;
+
+  const NodeProgressResponse({
+    required this.roadmapId,
+    required this.nodeId,
+    required this.status,
+    required this.progress,
+    required this.message,
+    this.availableNodes,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'roadmapId': roadmapId,
+        'nodeId': nodeId,
+        'status': status,
+        'progress': progress,
+        'message': message,
+        if (availableNodes != null) 'availableNodes': availableNodes,
+      };
+}
+
+/// GET /roadmaps/:id/progress 응답 DTO
+class ProgressSummaryResponse {
+  final String roadmapId;
+  final String title;
+  final int totalNodes;
+  final int completedNodes;
+  final int activeNodes;
+  final int lockedNodes;
+  final double innerRingProgress;
+  final double outerRingProgress;
+  final double overallProgress;
+  final bool canStartOuterRing;
+  final List<String> activeNodeIds;
+  final List<String> availableNodes;
+
+  const ProgressSummaryResponse({
+    required this.roadmapId,
+    required this.title,
+    required this.totalNodes,
+    required this.completedNodes,
+    required this.activeNodes,
+    required this.lockedNodes,
+    required this.innerRingProgress,
+    required this.outerRingProgress,
+    required this.overallProgress,
+    required this.canStartOuterRing,
+    required this.activeNodeIds,
+    required this.availableNodes,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'roadmapId': roadmapId,
+        'title': title,
+        'totalNodes': totalNodes,
+        'completedNodes': completedNodes,
+        'activeNodes': activeNodes,
+        'lockedNodes': lockedNodes,
+        'innerRingProgress': innerRingProgress,
+        'outerRingProgress': outerRingProgress,
+        'overallProgress': overallProgress,
+        'canStartOuterRing': canStartOuterRing,
+        'activeNodeIds': activeNodeIds,
+        'availableNodes': availableNodes,
+      };
+}

@@ -116,7 +116,7 @@ class CliService {
           print('기간:     ${rm['duration']}주');
           print('난이도:   ${rm['difficulty']}');
           print('진행률:   ${(rm['progress'] * 100).toStringAsFixed(0)}%');
-          print('공개:     ${rm['isPublic'] ? 'Yes' : 'No'}');
+          print('공개:     ${(rm['isPublic'] as bool) ? 'Yes' : 'No'}');
           print('생성일:   ${rm['createdAt']}');
           print('─────────────────────────────────────────');
         }
@@ -147,7 +147,7 @@ class CliService {
         print('기간:         ${roadmap['duration']}주');
         print('난이도:       ${roadmap['difficulty']}');
         print('진행률:       ${(roadmap['progress'] * 100).toStringAsFixed(0)}%');
-        print('공개:         ${roadmap['isPublic'] ? 'Yes' : 'No'}');
+        print('공개:         ${(roadmap['isPublic'] as bool) ? 'Yes' : 'No'}');
         print('생성일:       ${roadmap['createdAt']}');
         if (roadmap['forkedFrom'] != null) {
           print('포크 원본:    ${roadmap['forkedFrom']}');
@@ -208,7 +208,7 @@ class CliService {
         print('✓ ${result['message']}');
         print('');
         print('ID:        ${result['id']}');
-        print('공개 상태: ${result['isPublic'] ? 'Public' : 'Private'}');
+        print('공개 상태: ${(result['isPublic'] as bool) ? 'Public' : 'Private'}');
         print('공개 일시: ${result['sharedAt']}');
       } else {
         final error = data['error'] as Map<String, dynamic>;
@@ -282,6 +282,128 @@ class CliService {
       }
     } catch (e) {
       print('[ERROR] 포크 실패: $e');
+    }
+  }
+
+  /// start: 노드 시작
+  Future<void> startNode(String roadmapId, String nodeId) async {
+    try {
+      final response = await _httpClient.post(
+        Uri.parse('$baseUrl/roadmaps/$roadmapId/nodes/$nodeId/start'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && data['ok'] == true) {
+        final result = data['data'] as Map<String, dynamic>;
+        print('✓ ${result['message']}');
+        print('');
+        print('로드맵 ID: ${result['roadmapId']}');
+        print('노드 ID:   ${result['nodeId']}');
+        print('상태:      ${result['status']}');
+        print('진행률:    ${(result['progress'] * 100).toStringAsFixed(0)}%');
+      } else {
+        final error = data['error'] as Map<String, dynamic>;
+        print('[ERROR] ${error['code']}: ${error['message']}');
+      }
+    } catch (e) {
+      print('[ERROR] 노드 시작 실패: $e');
+    }
+  }
+
+  /// complete: 노드 완료
+  Future<void> completeNode(String roadmapId, String nodeId) async {
+    try {
+      final response = await _httpClient.post(
+        Uri.parse('$baseUrl/roadmaps/$roadmapId/nodes/$nodeId/complete'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && data['ok'] == true) {
+        final result = data['data'] as Map<String, dynamic>;
+        print('✓ ${result['message']}');
+        print('');
+        print('로드맵 ID: ${result['roadmapId']}');
+        print('노드 ID:   ${result['nodeId']}');
+        print('상태:      ${result['status']}');
+        print('진행률:    ${(result['progress'] * 100).toStringAsFixed(0)}%');
+
+        // 다음 가능한 노드가 있으면 표시
+        if (result.containsKey('availableNodes')) {
+          final availableNodes = result['availableNodes'] as List;
+          if (availableNodes.isNotEmpty) {
+            print('');
+            print('다음 시작 가능한 노드:');
+            for (final nodeId in availableNodes) {
+              print('  - $nodeId');
+            }
+          }
+        }
+      } else {
+        final error = data['error'] as Map<String, dynamic>;
+        print('[ERROR] ${error['code']}: ${error['message']}');
+      }
+    } catch (e) {
+      print('[ERROR] 노드 완료 실패: $e');
+    }
+  }
+
+  /// progress: 로드맵 진행 상태 조회
+  Future<void> showProgress(String roadmapId) async {
+    try {
+      final response =
+          await _httpClient.get(Uri.parse('$baseUrl/roadmaps/$roadmapId/progress'));
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && data['ok'] == true) {
+        final result = data['data'] as Map<String, dynamic>;
+
+        print('┌─────────────────────────────────────────┐');
+        print('│  로드맵 진행 상태                       │');
+        print('└─────────────────────────────────────────┘');
+        print('');
+        print('로드맵 ID: ${result['roadmapId']}');
+        print('제목:      ${result['title']}');
+        print('');
+        print('전체 노드: ${result['totalNodes']}');
+        print('완료:      ${result['completedNodes']}');
+        print('진행 중:   ${result['activeNodes']}');
+        print('잠김:      ${result['lockedNodes']}');
+        print('');
+        print('내부 링 진행률: ${(result['innerRingProgress'] * 100).toStringAsFixed(1)}%');
+        print('외부 링 진행률: ${(result['outerRingProgress'] * 100).toStringAsFixed(1)}%');
+        print('전체 진행률:    ${(result['overallProgress'] * 100).toStringAsFixed(1)}%');
+        print('');
+        print('외부 링 시작 가능: ${(result['canStartOuterRing'] as bool) ? 'Yes' : 'No'}');
+
+        if (result.containsKey('activeNodeIds')) {
+          final activeNodeIds = result['activeNodeIds'] as List;
+          if (activeNodeIds.isNotEmpty) {
+            print('');
+            print('진행 중인 노드:');
+            for (final nodeId in activeNodeIds) {
+              print('  - $nodeId');
+            }
+          }
+        }
+
+        if (result.containsKey('availableNodes')) {
+          final availableNodes = result['availableNodes'] as List;
+          if (availableNodes.isNotEmpty) {
+            print('');
+            print('시작 가능한 노드:');
+            for (final nodeId in availableNodes) {
+              print('  - $nodeId');
+            }
+          }
+        }
+      } else {
+        final error = data['error'] as Map<String, dynamic>;
+        print('[ERROR] ${error['code']}: ${error['message']}');
+      }
+    } catch (e) {
+      print('[ERROR] 진행 상태 조회 실패: $e');
     }
   }
 

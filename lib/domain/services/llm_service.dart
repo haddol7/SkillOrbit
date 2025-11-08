@@ -1,7 +1,9 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
-import '../models/roadmap.dart';
+
 import '../models/node.dart';
+import '../models/roadmap.dart';
 
 /// LlmService - OpenAI Chat Completions API 호출 서비스
 ///
@@ -18,7 +20,7 @@ import '../models/node.dart';
 class LlmService {
   static const String _apiUrl = 'https://api.openai.com/v1/chat/completions';
   static const String _model = 'gpt-3.5-turbo';
-  static const int _maxTokens = 1200;
+  static const int _maxTokens = 2500;
   static const int _maxRetries = 2;
 
   final String apiKey;
@@ -46,16 +48,38 @@ JSON 스키마:
       "id": "n1",
       "title": "핵심 주제/마일스톤",
       "description": "간단한 실행/학습 지시",
-      "status": "locked|active|completed"
+      "status": "locked",
+      "ring": "inner|outer",
+      "videos": [
+        {
+          "title": "동영상 제목",
+          "url": "https://..."
+        }
+      ],
+      "books": [
+        {
+          "title": "책/문서 제목",
+          "url": "https://..."
+        }
+      ],
+      "todos": [
+        "구체적인 학습 과제 1",
+        "구체적인 학습 과제 2"
+      ]
     }
-    // 총 12개 (내부 4, 외부 8 권장). status는 다양하게 배분.
+    // 총 12개 노드 (내부 링 4개, 외부 링 8개 권장)
   ]
 }
 
 제약:
 - title/description은 사용자 goal 맥락을 반영
 - 단계적으로 난이도를 높이고, 실습/평가를 포함
-- status는 최소 1개 active, 1개 completed 포함
+- status는 모두 "locked"으로 설정 (초기화는 서버에서 자동 처리)
+- ring: 처음 4개 노드는 "inner" (핵심/기초), 나머지 8개는 "outer" (심화/응용)
+- videos: 각 노드당 1-3개의 관련 동영상 링크 (YouTube, Udemy 등)
+- books: 각 노드당 1-2개의 책/문서 링크 (공식 문서, 교재 등)
+- todos: 각 노드당 2-4개의 구체적이고 실행 가능한 학습 과제
+- 모든 URL은 실제 존재하는 유용한 학습 자료여야 함
 - JSON 외 텍스트 출력 금지
 
 사용자 입력:
@@ -106,7 +130,7 @@ JSON 스키마:
           rethrow;
         }
         print('[LlmService] Attempt ${attempt + 1} failed: $e. Retrying...');
-        await Future.delayed(Duration(seconds: attempt + 1));
+        await Future<void>.delayed(Duration(seconds: attempt + 1));
       }
     }
 
@@ -209,6 +233,9 @@ JSON 스키마:
         final node = Node.fromJson(nodeData as Map<String, dynamic>);
         if (!Node.isValidStatus(node.status)) {
           throw LlmException('Invalid node status: ${node.status}');
+        }
+        if (!Node.isValidRing(node.ring)) {
+          throw LlmException('Invalid node ring: ${node.ring}');
         }
         return node;
       }).toList();

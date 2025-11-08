@@ -16,6 +16,9 @@ import '../lib/cli/cli_service.dart';
 /// $ dart run bin/cli.dart share <id>          # 로드맵 공개
 /// $ dart run bin/cli.dart public              # 공개 로드맵 목록
 /// $ dart run bin/cli.dart fork <id>           # 공개 로드맵 포크
+/// $ dart run bin/cli.dart start <roadmap_id> <node_id>    # 노드 시작
+/// $ dart run bin/cli.dart complete <roadmap_id> <node_id> # 노드 완료
+/// $ dart run bin/cli.dart progress <roadmap_id>           # 진행 상태 조회
 ///
 /// [환경변수]
 /// - SERVER_URL: 서버 주소 (기본값: http://localhost:8080)
@@ -76,6 +79,30 @@ void main(List<String> args) async {
         await cliService.fork(args[1]);
         break;
 
+      case 'start':
+        if (args.length < 3) {
+          print('[ERROR] Usage: dart run bin/cli.dart start <roadmap_id> <node_id>');
+          exit(1);
+        }
+        await cliService.startNode(args[1], args[2]);
+        break;
+
+      case 'complete':
+        if (args.length < 3) {
+          print('[ERROR] Usage: dart run bin/cli.dart complete <roadmap_id> <node_id>');
+          exit(1);
+        }
+        await cliService.completeNode(args[1], args[2]);
+        break;
+
+      case 'progress':
+        if (args.length < 2) {
+          print('[ERROR] Usage: dart run bin/cli.dart progress <roadmap_id>');
+          exit(1);
+        }
+        await cliService.showProgress(args[1]);
+        break;
+
       case 'help':
       case '--help':
       case '-h':
@@ -106,14 +133,22 @@ void _printUsage() {
   print('  dart run bin/cli.dart <command> [args]');
   print('');
   print('명령어:');
-  print('  create               로드맵 생성 (LLM 호출)');
-  print('  list                 내 로드맵 목록');
-  print('  view <id>            로드맵 상세 조회');
-  print('  delete <id>          로드맵 삭제');
-  print('  share <id>           로드맵 공개 전환');
-  print('  public               공개 로드맵 목록');
-  print('  fork <id>            공개 로드맵 포크');
-  print('  help                 이 메시지 표시');
+  print('  [로드맵 관리]');
+  print('  create                        로드맵 생성 (LLM 호출)');
+  print('  list                          내 로드맵 목록');
+  print('  view <id>                     로드맵 상세 조회');
+  print('  delete <id>                   로드맵 삭제');
+  print('  share <id>                    로드맵 공개 전환');
+  print('  public                        공개 로드맵 목록');
+  print('  fork <id>                     공개 로드맵 포크');
+  print('');
+  print('  [노드 진행 관리]');
+  print('  start <roadmap_id> <node_id>  노드 시작 (locked → active)');
+  print('  complete <roadmap_id> <node_id>  노드 완료 (active → completed)');
+  print('  progress <roadmap_id>         진행 상태 조회');
+  print('');
+  print('  [기타]');
+  print('  help                          이 메시지 표시');
   print('');
   print('환경변수:');
   print('  SERVER_URL           서버 주소 (기본: http://localhost:8080)');
@@ -122,6 +157,9 @@ void _printUsage() {
   print('  dart run bin/cli.dart create');
   print('  dart run bin/cli.dart list');
   print('  dart run bin/cli.dart view r_1234567890');
+  print('  dart run bin/cli.dart start r_1234567890 n2');
+  print('  dart run bin/cli.dart complete r_1234567890 n1');
+  print('  dart run bin/cli.dart progress r_1234567890');
   print('  dart run bin/cli.dart share r_1234567890');
   print('  dart run bin/cli.dart public');
   print('  dart run bin/cli.dart fork r_9876543210');

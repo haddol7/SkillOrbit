@@ -1,9 +1,11 @@
 import 'dart:convert';
+
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
-import '../domain/models/roadmap.dart';
+
 import '../domain/ports/roadmap_repository.dart';
 import '../domain/services/llm_service.dart';
+import '../domain/services/node_progress_service.dart';
 import 'dto.dart';
 
 /// [기능 명확성 - C 등급 반영]
@@ -18,6 +20,9 @@ import 'dto.dart';
 /// - GET    /public                    공개 로드맵 목록
 /// - GET    /public/:id                공개 로드맵 단건 조회
 /// - POST   /public/:id/fork           공개 로드맵 포크
+/// - POST   /roadmaps/:id/nodes/:nodeId/start    노드 시작
+/// - POST   /roadmaps/:id/nodes/:nodeId/complete 노드 완료
+/// - GET    /roadmaps/:id/progress     진행 상태 조회
 class RoadmapHandlers {
   final RoadmapRepository _repository;
   final LlmService _llmService;
@@ -39,6 +44,11 @@ class RoadmapHandlers {
     router.post('/roadmaps', _createRoadmap);
     router.delete('/roadmaps/<id>', _deleteRoadmap);
     router.post('/roadmaps/<id>/share', _shareRoadmap);
+
+    // 노드 진행 관련
+    router.post('/roadmaps/<id>/nodes/<nodeId>/start', _startNode);
+    router.post('/roadmaps/<id>/nodes/<nodeId>/complete', _completeNode);
+    router.get('/roadmaps/<id>/progress', _getProgress);
 
     // 공개 로드맵 관련
     router.get('/public', _listPublicRoadmaps);
@@ -132,12 +142,15 @@ class RoadmapHandlers {
       print('  Difficulty: ${req.difficulty}');
 
       // LLM 호출
-      final roadmap = await _llmService.generateRoadmap(
+      final llmRoadmap = await _llmService.generateRoadmap(
         goal: req.goal,
         duration: req.duration,
         difficulty: req.difficulty,
         ownerId: ownerId,
       );
+
+      // 노드 상태 초기화 (첫 번째 inner 노드만 active, 나머지는 locked)
+      final roadmap = NodeProgressService.initializeNodeStatuses(llmRoadmap);
 
       // 저장
       await _repository.save(roadmap);
@@ -382,6 +395,172 @@ class RoadmapHandlers {
       print('[Handler] Error forking roadmap: $e');
       final response = ApiResponse.failure(
         ApiError.internalError('Failed to fork roadmap: $e'),
+      );
+      return Response.internalServerError(
+        body: response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  /// POST /roadmaps/:id/nodes/:nodeId/start - 노드 시작
+  Future<Response> _startNode(Request request, String id, String nodeId) async {
+    try {
+      final roadmap = await _repository.findById(id);
+      if (roadmap == null) {
+        final response = ApiResponse.failure(
+          ApiError.notFound('Roadmap not found: $id'),
+        );
+        return Response.notFound(
+          response.toJsonString(),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // 노드 시작 시도
+      final updatedRoadmap = NodeProgressService.startNode(roadmap, nodeId);
+      await _repository.save(updatedRoadmap);
+
+      print('[Handler] Node started: $id -> $nodeId');
+
+      final response = ApiResponse.success(
+        NodeProgressResponse(
+          roadmapId: id,
+          nodeId: nodeId,
+          status: 'active',
+          progress: updatedRoadmap.progress,
+          message: 'Node started successfully',
+        ).toJson(),
+      );
+
+      return Response.ok(
+        response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } on NodeProgressException catch (e) {
+      print('[Handler] Node progress error: $e');
+      final response = ApiResponse.failure(
+        ApiError.badRequest(e.message),
+      );
+      return Response.badRequest(
+        body: response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      print('[Handler] Error starting node: $e');
+      final response = ApiResponse.failure(
+        ApiError.internalError('Failed to start node: $e'),
+      );
+      return Response.internalServerError(
+        body: response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  /// POST /roadmaps/:id/nodes/:nodeId/complete - 노드 완료
+  Future<Response> _completeNode(
+      Request request, String id, String nodeId) async {
+    try {
+      final roadmap = await _repository.findById(id);
+      if (roadmap == null) {
+        final response = ApiResponse.failure(
+          ApiError.notFound('Roadmap not found: $id'),
+        );
+        return Response.notFound(
+          response.toJsonString(),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // 노드 완료 시도
+      final updatedRoadmap = NodeProgressService.completeNode(roadmap, nodeId);
+      await _repository.save(updatedRoadmap);
+
+      print('[Handler] Node completed: $id -> $nodeId');
+
+      // 다음 시작 가능한 노드 조회
+      final availableNodes = NodeProgressService.getAvailableNodes(updatedRoadmap);
+
+      final responseData = NodeProgressResponse(
+        roadmapId: id,
+        nodeId: nodeId,
+        status: 'completed',
+        progress: updatedRoadmap.progress,
+        message: 'Node completed successfully',
+        availableNodes: availableNodes.isNotEmpty ? availableNodes : null,
+      ).toJson();
+
+      final response = ApiResponse.success(responseData);
+
+      return Response.ok(
+        response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } on NodeProgressException catch (e) {
+      print('[Handler] Node progress error: $e');
+      final response = ApiResponse.failure(
+        ApiError.badRequest(e.message),
+      );
+      return Response.badRequest(
+        body: response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      print('[Handler] Error completing node: $e');
+      final response = ApiResponse.failure(
+        ApiError.internalError('Failed to complete node: $e'),
+      );
+      return Response.internalServerError(
+        body: response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  /// GET /roadmaps/:id/progress - 진행 상태 조회
+  Future<Response> _getProgress(Request request, String id) async {
+    try {
+      final roadmap = await _repository.findById(id);
+      if (roadmap == null) {
+        final response = ApiResponse.failure(
+          ApiError.notFound('Roadmap not found: $id'),
+        );
+        return Response.notFound(
+          response.toJsonString(),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // 진행 상태 요약 조회
+      final summary = NodeProgressService.getProgressSummary(roadmap);
+      final availableNodes = NodeProgressService.getAvailableNodes(roadmap);
+
+      final responseData = ProgressSummaryResponse(
+        roadmapId: id,
+        title: roadmap.title,
+        totalNodes: summary.totalNodes,
+        completedNodes: summary.completedNodes,
+        activeNodes: summary.activeNodes,
+        lockedNodes: summary.lockedNodes,
+        innerRingProgress: summary.innerRingProgress,
+        outerRingProgress: summary.outerRingProgress,
+        overallProgress: summary.overallProgress,
+        canStartOuterRing: summary.canStartOuterRing,
+        activeNodeIds: summary.activeNodeIds,
+        availableNodes: availableNodes,
+      ).toJson();
+
+      final response = ApiResponse.success(responseData);
+
+      return Response.ok(
+        response.toJsonString(),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      print('[Handler] Error getting progress: $e');
+      final response = ApiResponse.failure(
+        ApiError.internalError('Failed to get progress: $e'),
       );
       return Response.internalServerError(
         body: response.toJsonString(),
